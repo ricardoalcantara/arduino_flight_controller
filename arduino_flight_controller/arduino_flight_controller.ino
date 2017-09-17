@@ -3,7 +3,15 @@
 #define ESC3 7
 #define ESC4 8
 
+#define CH1 3
+#define CH2 5
+#define CH3 6
+#define CH4 9
+#define CH5 10
+#define CH6 11
+
 #define NO_MOTOR true
+#define NO_SENSORS true
 
 #define CALIBRATE_MODE false
 // Debug
@@ -31,11 +39,12 @@ int AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
 
 void setup() {
   Serial.begin(9600);
-  initMotor();
-
+  
   if (DEBUG) {
     Serial.println("Debuging...");
   }
+
+  initMotor();
 
   if (!NO_MOTOR) {
     if (CALIBRATE_MODE) {
@@ -49,13 +58,14 @@ void setup() {
     setMotor(MIN_SIGNAL);
   }
 
-  Wire.begin();
-  Wire.beginTransmission(MPU);
-  Wire.write(0x6B); 
-  
-  //Inicializa o MPU-6050
-  Wire.write(0); 
-  Wire.endTransmission(true);
+  initSensors();
+
+  pinMode(CH1, INPUT);
+  pinMode(CH2, INPUT);
+  pinMode(CH3, INPUT);
+  pinMode(CH4, INPUT);
+  pinMode(CH5, INPUT);
+  pinMode(CH6, INPUT);
 
   delay(5000);
   Serial.println("Done....");
@@ -64,7 +74,21 @@ void setup() {
 void loop() {
 
   readSensors();
+
+  int ch1 = pulseIn(CH1, HIGH, 25000);
+  int ch2 = pulseIn(CH2, HIGH, 25000);
+  int ch3 = pulseIn(CH3, HIGH, 25000);
+  int ch4 = pulseIn(CH4, HIGH, 25000);
+  int ch5 = pulseIn(CH5, HIGH, 25000);
+  int ch6 = pulseIn(CH6, HIGH, 25000);
   
+  Serial.print("CH1 = "); Serial.print(ch1);
+  Serial.print(" | CH2 = "); Serial.print(ch2);
+  Serial.print(" | CH3 = "); Serial.print(ch3);
+  Serial.print(" | CH4 = "); Serial.print(ch4);
+  Serial.print(" | CH5 = "); Serial.print(ch5);
+  Serial.print(" | CH6 = "); Serial.println(ch6);
+
   // send data only when you receive data:
   if (Serial.available() > 0) {
     //Le o valor do potenciometro
@@ -75,6 +99,12 @@ void loop() {
     
     //Envia o valor para o motor
     setMotor(valor);
+  }
+
+
+  if (DEBUG && NO_MOTOR) {
+    //Aguarda 300 ms e reinicia o processo
+    delay(300);
   }
 }
 
@@ -100,7 +130,7 @@ void initMotor() {
 
   Serial.println("Init motor 4");
   motor4.attach(ESC4);
-  motor4.write(MIN_SIGNAL);
+  // motor4.write(MIN_SIGNAL);
 }
 
 void setMotor(int value) {
@@ -131,7 +161,26 @@ void setMotor(int value) {
   motor4.writeMicroseconds(value);
 }
 
+void initSensors() {
+  if (NO_SENSORS) {
+    Serial.println("No sensors");
+    return;
+  }
+
+  Wire.begin();
+  Wire.beginTransmission(MPU);
+  Wire.write(0x6B); 
+  
+  //Inicializa o MPU-6050
+  Wire.write(0); 
+  Wire.endTransmission(true);
+}
+
 void readSensors() {
+  if (NO_SENSORS) {
+    return;
+  }
+
   Wire.beginTransmission(MPU);
   Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
@@ -161,10 +210,5 @@ void readSensors() {
   Serial.print(" | GyY = "); Serial.print(GyY);
   //Envia valor Z do giroscopio para a serial e o LCD
   Serial.print(" | GyZ = "); Serial.println(GyZ);
-
-  if (DEBUG && NO_MOTOR) {
-    //Aguarda 300 ms e reinicia o processo
-    delay(300);
-  }
 }
 
