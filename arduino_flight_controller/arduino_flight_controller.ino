@@ -6,7 +6,7 @@
 #define NO_MOTOR true
 
 #define CALIBRATE_MODE false
-
+// Debug
 #define DEBUG true
 
 #define MAX_SIGNAL 2000
@@ -32,6 +32,10 @@ int AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
 void setup() {
   Serial.begin(9600);
   initMotor();
+
+  if (DEBUG) {
+    Serial.println("Debuging...");
+  }
 
   if (!NO_MOTOR) {
     if (CALIBRATE_MODE) {
