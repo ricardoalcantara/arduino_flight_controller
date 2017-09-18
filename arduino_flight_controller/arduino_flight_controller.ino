@@ -10,7 +10,7 @@
 #define CH5 10
 #define CH6 11
 
-#define NO_MOTOR true
+#define NO_MOTOR false
 #define NO_SENSORS true
 
 #define CALIBRATE_MODE false
@@ -36,6 +36,8 @@ const int MPU=0x68;
 
 //Variaveis para armazenar valores dos sensores
 int AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+// rc receiver channels
+int ch1,ch2,ch3,ch4,ch5,ch6;
 
 void setup() {
   Serial.begin(9600);
@@ -45,27 +47,9 @@ void setup() {
   }
 
   initMotor();
-
-  if (!NO_MOTOR) {
-    if (CALIBRATE_MODE) {
-      setMotor(MAX_SIGNAL);
-      
-      Serial.println("Turn on power source, then Wait 2 seconds and press any key");
-      while(!Serial.available());
-      Serial.read();  
-    }
-    
-    setMotor(MIN_SIGNAL);
-  }
-
   initSensors();
-
-  pinMode(CH1, INPUT);
-  pinMode(CH2, INPUT);
-  pinMode(CH3, INPUT);
-  pinMode(CH4, INPUT);
-  pinMode(CH5, INPUT);
-  pinMode(CH6, INPUT);
+  initRCReceiver();
+  
 
   delay(5000);
   Serial.println("Done....");
@@ -74,32 +58,20 @@ void setup() {
 void loop() {
 
   readSensors();
-
-  int ch1 = pulseIn(CH1, HIGH, 25000);
-  int ch2 = pulseIn(CH2, HIGH, 25000);
-  int ch3 = pulseIn(CH3, HIGH, 25000);
-  int ch4 = pulseIn(CH4, HIGH, 25000);
-  int ch5 = pulseIn(CH5, HIGH, 25000);
-  int ch6 = pulseIn(CH6, HIGH, 25000);
-  
-  Serial.print("CH1 = "); Serial.print(ch1);
-  Serial.print(" | CH2 = "); Serial.print(ch2);
-  Serial.print(" | CH3 = "); Serial.print(ch3);
-  Serial.print(" | CH4 = "); Serial.print(ch4);
-  Serial.print(" | CH5 = "); Serial.print(ch5);
-  Serial.print(" | CH6 = "); Serial.println(ch6);
-
-  // send data only when you receive data:
-  if (Serial.available() > 0) {
-    //Le o valor do potenciometro
-    int valor = Serial.parseInt();
+  readRCReceiver();
+  // testing
+  setMotor(ch3);
+  // // send data only when you receive data:
+  // if (Serial.available() > 0) {
+  //   //Le o valor do potenciometro
+  //   int valor = Serial.parseInt();
     
-    Serial.print("Input: ");
-    Serial.println(valor);
+  //   Serial.print("Input: ");
+  //   Serial.println(valor);
     
-    //Envia o valor para o motor
-    setMotor(valor);
-  }
+  //   //Envia o valor para o motor
+  //   setMotor(valor);
+  // }
 
 
   if (DEBUG && NO_MOTOR) {
@@ -131,6 +103,15 @@ void initMotor() {
   Serial.println("Init motor 4");
   motor4.attach(ESC4);
   // motor4.write(MIN_SIGNAL);
+
+  if (CALIBRATE_MODE) {
+    setMotor(MAX_SIGNAL);
+    
+    Serial.println("Turn on power source, then Wait 2 seconds and press any key");
+    while(!Serial.available());
+  }
+  
+  setMotor(MIN_SIGNAL);
 }
 
 void setMotor(int value) {
@@ -140,11 +121,10 @@ void setMotor(int value) {
     return;
   }
 
-  if (value >= 0 && value <= 179) {
-    value = map(value, 0, 179, MIN_SIGNAL, MAX_SIGNAL);
-  } else if (value < MIN_SIGNAL || value > MAX_SIGNAL) {
-    Serial.println("Invalid signal");
-    return;
+  if (value < MIN_SIGNAL) {
+    value = MIN_SIGNAL;
+  } else if (value > MAX_SIGNAL) {
+    value = MAX_SIGNAL;
   }
 
   // Serial.print("Set motor 1: ");
@@ -212,3 +192,29 @@ void readSensors() {
   Serial.print(" | GyZ = "); Serial.println(GyZ);
 }
 
+void initRCReceiver() {
+  pinMode(CH1, INPUT);
+  pinMode(CH2, INPUT);
+  pinMode(CH3, INPUT);
+  pinMode(CH4, INPUT);
+  pinMode(CH5, INPUT);
+  pinMode(CH6, INPUT);
+}
+
+void readRCReceiver() {
+
+  ch1 = pulseIn(CH1, HIGH);
+  ch2 = pulseIn(CH2, HIGH);
+  ch3 = pulseIn(CH3, HIGH);
+  ch4 = pulseIn(CH4, HIGH);
+  ch5 = pulseIn(CH5, HIGH);
+  ch6 = pulseIn(CH6, HIGH);
+  
+  Serial.print("CH1 = "); Serial.print(ch1);
+  Serial.print(" | CH2 = "); Serial.print(ch2);
+  Serial.print(" | CH3 = "); Serial.print(ch3);
+  Serial.print(" | CH4 = "); Serial.print(ch4);
+  Serial.print(" | CH5 = "); Serial.print(ch5);
+  Serial.print(" | CH6 = "); Serial.println(ch6);
+
+}
