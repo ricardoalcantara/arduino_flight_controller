@@ -1,16 +1,9 @@
-#define ESC1 2
-#define ESC2 4
-#define ESC3 7
-#define ESC4 8
+#define ESC_A 2
+#define ESC_B 3
+#define ESC_C 4
+#define ESC_D 5
 
-#define CH1 3
-#define CH2 5
-#define CH3 6
-#define CH4 9
-#define CH5 10
-#define CH6 11
-
-#define NO_MOTOR true
+#define NO_MOTOR false
 #define NO_SENSORS true
 
 #define CALIBRATE_MODE false
@@ -26,10 +19,10 @@
 // Lib needed to connect to the MPU 6050
 #include<Wire.h>
 
-Servo motor1;
-Servo motor2;
-Servo motor3;
-Servo motor4;
+Servo motorA;
+Servo motorB;
+Servo motorC;
+Servo motorD;
 
 //MPU6050 address of I2C
 const int MPU=0x68;
@@ -48,6 +41,33 @@ int input_YAW;      //In my case channel 4 of the receiver and pin D12 of arduin
 int input_PITCH;    //In my case channel 2 of the receiver and pin D9 of arduino
 int input_ROLL;     //In my case channel 1 of the receiver and pin D8 of arduino
 int input_THROTTLE; //In my case channel 3 of the receiver and pin D10 of arduino
+
+// PID
+struct error {
+  float yaw;
+  float pitch;
+  float roll;
+};
+
+struct PID {
+  float yaw;
+  float pitch;
+  float roll;
+};
+
+int normalize(float value)
+{
+  int maxVal = MAX_SIGNAL;
+  value = (int) value;
+
+  if (value > maxVal) {
+      value = maxVal;
+  } else if (value < MIN_SIGNAL) {
+      value = MIN_SIGNAL;
+  }
+
+  return value;
+}
 
 void setup() {
   /*
@@ -71,13 +91,14 @@ void setup() {
   
   //Start the serial in order to see the result on the monitor
   //Remember to select the same baud rate on the serial monitor
-  // Serial.begin(250000);  
-  Serial.begin(9600);
+  Serial.begin(19200);  
+  // Serial.begin(9600);
   
   if (DEBUG) {
     Serial.println("Debuging...");
   }
 
+  // input_THROTTLE = 0;
   initMotor();
   initSensors();
   // initRCReceiver();
@@ -91,19 +112,19 @@ void loop() {
 
   readSensors();
 
-  Serial.print("input_THROTTLE: ");
-  Serial.print(input_THROTTLE);
-  Serial.print(" | input_YAW: ");
-  Serial.print(input_YAW);
-  Serial.print(" | input_PITCH: ");
-  Serial.print(input_PITCH);
-  Serial.print(" | input_ROLL: ");
-  Serial.print(input_ROLL);
-  Serial.println("    ");
+  // Serial.print("input_THROTTLE: ");
+  // Serial.print(input_THROTTLE);
+  // Serial.print(" | input_YAW: ");
+  // Serial.print(input_YAW);
+  // Serial.print(" | input_PITCH: ");
+  // Serial.print(input_PITCH);
+  // Serial.print(" | input_ROLL: ");
+  // Serial.print(input_ROLL);
+  // Serial.println("    ");
   // readRCReceiver();
   // testing
   
-  // setMotor(ch3);
+  setMotor();
   
   // // send data only when you receive data:
   // if (Serial.available() > 0) {
@@ -133,56 +154,140 @@ void initMotor() {
   int initValue = 0;
 
   Serial.println("Init motor 1");
-  motor1.attach(ESC1);
-  // motor1.write(MIN_SIGNAL);
+  motorA.attach(ESC_A, MIN_SIGNAL, MAX_SIGNAL);
+  motorA.writeMicroseconds(MIN_SIGNAL);
 
   Serial.println("Init motor 2");
-  motor2.attach(ESC2);
-  // motor2.write(MIN_SIGNAL);
+  motorB.attach(ESC_B, MIN_SIGNAL, MAX_SIGNAL);
+  motorB.writeMicroseconds(MIN_SIGNAL);
 
   Serial.println("Init motor 3");
-  motor3.attach(ESC3);
-  // motor3.write(MIN_SIGNAL);
+  motorC.attach(ESC_C, MIN_SIGNAL, MAX_SIGNAL);
+  motorC.writeMicroseconds(MIN_SIGNAL);
 
   Serial.println("Init motor 4");
-  motor4.attach(ESC4);
-  // motor4.write(MIN_SIGNAL);
+  motorD.attach(ESC_D, MIN_SIGNAL, MAX_SIGNAL);
+  motorD.writeMicroseconds(MIN_SIGNAL);
 
   if (CALIBRATE_MODE) {
-    setMotor(MAX_SIGNAL);
+    // setMotor(MAX_SIGNAL);
     
     Serial.println("Turn on power source, then Wait 2 seconds and press any key");
     while(!Serial.available());
   }
   
-  setMotor(MIN_SIGNAL);
+  // setMotor();
 }
 
-void setMotor(int value) {
+void setMotor() {
 
-  if (NO_MOTOR || value == -1) {
+  if (NO_MOTOR) {
     Serial.println("No motors to set");
     return;
   }
 
-  if (value < MIN_SIGNAL) {
-    value = MIN_SIGNAL;
-  } else if (value > MAX_SIGNAL) {
-    value = MAX_SIGNAL;
+  //Adjust difference - MIN_SIGNAL
+  int throttle = input_THROTTLE - MIN_SIGNAL;
+  float cmd_motA = throttle;
+  float cmd_motB = throttle;
+  float cmd_motC = throttle;
+  float cmd_motD = throttle;
+
+  //Somatório dos erros
+  struct error sError = { .yaw = 0, .pitch = 0, .roll = 0};
+
+  //Valor desejado - angulo atual
+  struct error anguloAtual = { .yaw = 0, .pitch = 0, .roll = 0};
+  struct error anguloDesejado = { .yaw = 0, .pitch = 0, .roll = 0};
+
+  struct error errors = { 
+      .yaw = anguloDesejado.yaw - anguloAtual.yaw,
+      .pitch = anguloDesejado.pitch - anguloAtual.pitch,
+      .roll = anguloDesejado.roll - anguloAtual.roll
+  };
+  
+  struct error lastErrors;
+  struct error deltaError;
+
+  //Variáveis de ajuste
+  struct PID Kp = { .yaw = 0, .pitch = 0, .roll = 0};
+  struct PID Ki = { .yaw = 0, .pitch = 0, .roll = 0};
+  struct PID Kd = { .yaw = 0, .pitch = 0, .roll = 0};
+  
+  if (throttle != 0) {
+      // Calculate sum of errors : Integral coefficients
+      sError.yaw += errors.yaw;
+      sError.pitch += errors.pitch;
+      sError.roll += errors.roll;
+
+      // Calculate error delta : Derivative coefficients
+      deltaError.yaw = errors.yaw - lastErrors.yaw;
+      deltaError.pitch = errors.pitch - lastErrors.pitch;
+      deltaError.roll = errors.roll - lastErrors.roll;
+
+      // Save current error as lastErr for next time
+      lastErrors.yaw = errors.yaw;
+      lastErrors.pitch = errors.pitch;
+      lastErrors.roll = errors.roll;
+
+      // Yaw - Lacet (Z axis)
+      cmd_motA -= (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
+      cmd_motD -= (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
+      cmd_motC += (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
+      cmd_motB += (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
+
+      // Pitch - Tangage (Y axis)
+      cmd_motA -= (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
+      cmd_motB -= (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
+      cmd_motC += (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
+      cmd_motD += (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
+
+      // Roll - Roulis (X axis)
+      cmd_motA -= (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
+      cmd_motC -= (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
+      cmd_motB += (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
+      cmd_motD += (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
   }
 
-  // Serial.print("Set motor 1: ");
-  // Serial.println(value);
-  motor1.writeMicroseconds(value);
-  // Serial.print("Set motor 2: ");
-  // Serial.println(value);
-  motor2.writeMicroseconds(value);
-  // Serial.print("Set motor 3: ");
-  // Serial.println(value);
-  motor3.writeMicroseconds(value);
-  // Serial.print("Set motor 4: ");
-  // Serial.println(value);
-  motor4.writeMicroseconds(value);
+  cmd_motA += MIN_SIGNAL;
+  cmd_motB += MIN_SIGNAL;
+  cmd_motC += MIN_SIGNAL;
+  cmd_motD += MIN_SIGNAL;
+
+  Serial.print("cmd_motA ");
+  Serial.print(cmd_motA);
+  Serial.print(" | cmd_motB ");
+  Serial.print(cmd_motB);
+  Serial.print(" | cmd_motC ");
+  Serial.print(cmd_motC);
+  Serial.print(" | cmd_motD ");
+  Serial.print(cmd_motD);
+  Serial.println("    ");
+
+  // Apply speed for each motor
+  motorA.writeMicroseconds(normalize(cmd_motA));
+  motorB.writeMicroseconds(normalize(cmd_motB));
+  motorC.writeMicroseconds(normalize(cmd_motC));
+  motorD.writeMicroseconds(normalize(cmd_motD));
+
+  // if (value < MIN_SIGNAL) {
+  //   value = MIN_SIGNAL;
+  // } else if (value > MAX_SIGNAL) {
+  //   value = MAX_SIGNAL;
+  // }
+
+  // // Serial.print("Set motor 1: ");
+  // // Serial.println(value);
+  // motor1.writeMicroseconds(value);
+  // // Serial.print("Set motor 2: ");
+  // // Serial.println(value);
+  // motor2.writeMicroseconds(value);
+  // // Serial.print("Set motor 3: ");
+  // // Serial.println(value);
+  // motor3.writeMicroseconds(value);
+  // // Serial.print("Set motor 4: ");
+  // // Serial.println(value);
+  // motor4.writeMicroseconds(value);
 }
 
 void initSensors() {
