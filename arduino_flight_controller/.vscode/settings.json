@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "condition_variable": "c",
-        "future": "c"
+        "future": "c",
+        "slist": "cpp"
     }
 }
