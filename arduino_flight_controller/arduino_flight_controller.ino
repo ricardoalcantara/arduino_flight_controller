@@ -13,6 +13,10 @@
 #define MAX_SIGNAL 2000
 #define MIN_SIGNAL 1000
 
+#define SOFT 0
+#define HARD 1
+#define FLIGHT_MODE SOFT
+
 // Lib needed to connect to the motors by their ESCs
 #include <Servo.h>
 
@@ -55,13 +59,14 @@ struct PID {
   float roll;
 };
 
+struct error lastErrors;
+
 int normalize(float value)
 {
-  int maxVal = MAX_SIGNAL;
-  value = (int) value;
+  value = map((int) value, 0, 1000, MIN_SIGNAL, MAX_SIGNAL);
 
-  if (value > maxVal) {
-      value = maxVal;
+  if (value > MAX_SIGNAL) {
+      value = MAX_SIGNAL;
   } else if (value < MIN_SIGNAL) {
       value = MIN_SIGNAL;
   }
@@ -186,8 +191,25 @@ void setMotor() {
     return;
   }
 
+  int rxRoll;
+  int rxPitch;
+  int rxYaw;
+
+  if (FLIGHT_MODE == SOFT)
+  {
+    rxRoll = map(input_ROLL, MIN_SIGNAL, MAX_SIGNAL, -45, 45);
+    rxPitch = map(input_PITCH, MIN_SIGNAL, MAX_SIGNAL, -45, 45);   
+    rxYaw = map(input_YAW, MIN_SIGNAL, MAX_SIGNAL, -180, 180);
+  }
+  else
+  {
+    rxRoll = map(input_ROLL, MIN_SIGNAL, MAX_SIGNAL, -180, 180);
+    rxPitch = map(input_PITCH, MIN_SIGNAL, MAX_SIGNAL, -180, 180);
+    rxYaw = map(input_YAW, MIN_SIGNAL, MAX_SIGNAL, -270, 270);
+  }
+
   //Adjust difference - MIN_SIGNAL
-  int throttle = input_THROTTLE - MIN_SIGNAL;
+  int throttle = map(input_THROTTLE, MIN_SIGNAL, MAX_SIGNAL, 0, 1000);
   float cmd_motA = throttle;
   float cmd_motB = throttle;
   float cmd_motC = throttle;
@@ -198,7 +220,7 @@ void setMotor() {
 
   //Valor desejado - angulo atual
   struct error anguloAtual = { .yaw = 0, .pitch = 0, .roll = 0};
-  struct error anguloDesejado = { .yaw = 0, .pitch = 0, .roll = 0};
+  struct error anguloDesejado = { .yaw = rxYaw, .pitch = rxPitch, .roll = rxRoll};
 
   struct error errors = { 
       .yaw = anguloDesejado.yaw - anguloAtual.yaw,
@@ -206,15 +228,14 @@ void setMotor() {
       .roll = anguloDesejado.roll - anguloAtual.roll
   };
   
-  struct error lastErrors;
   struct error deltaError;
 
   //Variáveis de ajuste
-  struct PID Kp = { .yaw = 0, .pitch = 0, .roll = 0};
+  struct PID Kp = { .yaw = 10, .pitch = 10, .roll = 10};
   struct PID Ki = { .yaw = 0, .pitch = 0, .roll = 0};
   struct PID Kd = { .yaw = 0, .pitch = 0, .roll = 0};
   
-  if (throttle != 0) {
+  if (throttle > 0) {
       // Calculate sum of errors : Integral coefficients
       sError.yaw += errors.yaw;
       sError.pitch += errors.pitch;
@@ -231,36 +252,34 @@ void setMotor() {
       lastErrors.roll = errors.roll;
 
       // Yaw - Lacet (Z axis)
-      cmd_motA -= (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
-      cmd_motD -= (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
-      cmd_motC += (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
-      cmd_motB += (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
+      int yaw_PID = (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
+      cmd_motA -= yaw_PID;
+      cmd_motB += yaw_PID;
+      cmd_motC += yaw_PID;
+      cmd_motD -= yaw_PID;
 
       // Pitch - Tangage (Y axis)
-      cmd_motA -= (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
-      cmd_motB -= (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
-      cmd_motC += (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
-      cmd_motD += (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
+      int pitch_PID = (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
+      cmd_motA -= pitch_PID;
+      cmd_motB -= pitch_PID;
+      cmd_motC += pitch_PID;
+      cmd_motD += pitch_PID;
 
       // Roll - Roulis (X axis)
-      cmd_motA -= (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
-      cmd_motC -= (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
-      cmd_motB += (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
-      cmd_motD += (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
+      int roll_PID = (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
+      cmd_motA -= roll_PID;
+      cmd_motB += roll_PID;
+      cmd_motC -= roll_PID;
+      cmd_motD += roll_PID;
   }
 
-  cmd_motA += MIN_SIGNAL;
-  cmd_motB += MIN_SIGNAL;
-  cmd_motC += MIN_SIGNAL;
-  cmd_motD += MIN_SIGNAL;
-
-  Serial.print("cmd_motA ");
+  Serial.print(" | Motor_A ");
   Serial.print(cmd_motA);
-  Serial.print(" | cmd_motB ");
+  Serial.print(" | Motor_B ");
   Serial.print(cmd_motB);
-  Serial.print(" | cmd_motC ");
+  Serial.print(" | Motor_C ");
   Serial.print(cmd_motC);
-  Serial.print(" | cmd_motD ");
+  Serial.print(" | Motor_D ");
   Serial.print(cmd_motD);
   Serial.println("    ");
 
