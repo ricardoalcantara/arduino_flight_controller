@@ -4,11 +4,7 @@
 #define ESC_D 5
 
 #define NO_MOTOR false
-#define NO_SENSORS true
-
-#define CALIBRATE_MODE false
-// Debug
-#define DEBUG true
+#define NO_SENSORS false
 
 #define MAX_SIGNAL 2000
 #define MIN_SIGNAL 1000
@@ -33,6 +29,9 @@ const int MPU=0x68;
 
 //Variaveis para armazenar valores dos sensores
 int AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+
+long timer, timerPrev;
+float compAngleX, compAngleY;
 
 //We create variables for the time width values of each PWM input signal
 unsigned long counter_1, counter_2, counter_3, counter_4, current_count;
@@ -96,58 +95,29 @@ void setup() {
   
   //Start the serial in order to see the result on the monitor
   //Remember to select the same baud rate on the serial monitor
-  Serial.begin(19200);  
+  Serial.begin(57600);  
   // Serial.begin(9600);
   
-  if (DEBUG) {
-    Serial.println("Debuging...");
-  }
-
   // input_THROTTLE = 0;
   initMotor();
   initSensors();
   // initRCReceiver();
   
-
+  // Tempo para os motores armarem
   delay(5000);
   Serial.println("Done....");
 }
 
 void loop() {
+  // medir se precisa realocar isso como no exemplo
+  // http://www.pitt.edu/~mpd41/Angle.ino
+  timerPrev = timer;  // the previous time is stored before the actual time read
+  timer = millis();  // actual time read
 
   readSensors();
-
-  // Serial.print("input_THROTTLE: ");
-  // Serial.print(input_THROTTLE);
-  // Serial.print(" | input_YAW: ");
-  // Serial.print(input_YAW);
-  // Serial.print(" | input_PITCH: ");
-  // Serial.print(input_PITCH);
-  // Serial.print(" | input_ROLL: ");
-  // Serial.print(input_ROLL);
-  // Serial.println("    ");
-  // readRCReceiver();
-  // testing
-  
   setMotor();
-  
-  // // send data only when you receive data:
-  // if (Serial.available() > 0) {
-  //   //Le o valor do potenciometro
-  //   int valor = Serial.parseInt();
-    
-  //   Serial.print("Input: ");
-  //   Serial.println(valor);
-    
-  //   //Envia o valor para o motor
-  //   setMotor(valor);
-  // }
 
-
-  if (DEBUG && NO_MOTOR) {
-    //Aguarda 300 ms e reinicia o processo
-    delay(300);
-  }
+  Serial.println("    ");  
 }
 
 void initMotor() {
@@ -173,24 +143,9 @@ void initMotor() {
   Serial.println("Init motor 4");
   motorD.attach(ESC_D, MIN_SIGNAL, MAX_SIGNAL);
   motorD.writeMicroseconds(MIN_SIGNAL);
-
-  if (CALIBRATE_MODE) {
-    // setMotor(MAX_SIGNAL);
-    
-    Serial.println("Turn on power source, then Wait 2 seconds and press any key");
-    while(!Serial.available());
-  }
-  
-  // setMotor();
 }
 
 void setMotor() {
-
-  if (NO_MOTOR) {
-    Serial.println("No motors to set");
-    return;
-  }
-
   int rxRoll;
   int rxPitch;
   int rxYaw;
@@ -219,19 +174,20 @@ void setMotor() {
   struct error sError = { .yaw = 0, .pitch = 0, .roll = 0};
 
   //Valor desejado - angulo atual
-  struct error anguloAtual = { .yaw = 0, .pitch = 0, .roll = 0};
+  struct error anguloAtual = { .yaw = 0, .pitch = compAngleX, .roll = compAngleY};
+  // struct error anguloAtual = { .yaw = 0, .pitch = compAngleY, .roll = compAngleX};
   struct error anguloDesejado = { .yaw = rxYaw, .pitch = rxPitch, .roll = rxRoll};
 
   struct error errors = { 
-      .yaw = anguloDesejado.yaw - anguloAtual.yaw,
-      .pitch = anguloDesejado.pitch - anguloAtual.pitch,
-      .roll = anguloDesejado.roll - anguloAtual.roll
+      .yaw = anguloAtual.yaw - anguloDesejado.yaw,
+      .pitch = anguloAtual.pitch - anguloDesejado.pitch,
+      .roll = anguloAtual.roll - anguloDesejado.roll
   };
   
   struct error deltaError;
 
   //Variáveis de ajuste
-  struct PID Kp = { .yaw = 10, .pitch = 10, .roll = 10};
+  struct PID Kp = { .yaw = 2, .pitch = 2, .roll = 2};
   struct PID Ki = { .yaw = 0, .pitch = 0, .roll = 0};
   struct PID Kd = { .yaw = 0, .pitch = 0, .roll = 0};
   
@@ -281,9 +237,12 @@ void setMotor() {
   Serial.print(cmd_motC);
   Serial.print(" | Motor_D ");
   Serial.print(cmd_motD);
-  Serial.println("    ");
 
   // Apply speed for each motor
+  if (NO_MOTOR) {
+    Serial.println("No motors to set");
+    return;
+  }
   motorA.writeMicroseconds(normalize(cmd_motA));
   motorB.writeMicroseconds(normalize(cmd_motB));
   motorC.writeMicroseconds(normalize(cmd_motC));
@@ -317,11 +276,42 @@ void initSensors() {
 
   Wire.begin();
   Wire.beginTransmission(MPU);
-  Wire.write(0x6B); 
-  
-  //Inicializa o MPU-6050
+  Wire.write(0x6B);
   Wire.write(0); 
   Wire.endTransmission(true);
+  delay(100);
+
+  //setup starting angle
+  //1) collect the data
+  Wire.beginTransmission(MPU);
+  Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU,6,true);  // request a total of 14 registers
+  AcX=Wire.read()<<8|Wire.read();  // 0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)     
+  AcY=Wire.read()<<8|Wire.read();  // 0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
+  AcZ=Wire.read()<<8|Wire.read();  // 0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
+  // Tmp=Wire.read()<<8|Wire.read();  // 0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
+  
+  Wire.beginTransmission(MPU);
+  Wire.write(0x43);  // starting with register 0x3B (ACCEL_XOUT_H)
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU,6,true);  // request a total of 14 registers
+  GyX=Wire.read()<<8|Wire.read();  // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+  GyY=Wire.read()<<8|Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+  GyZ=Wire.read()<<8|Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+
+  //2) calculate pitch and roll
+  double roll = atan2(AcY, AcZ)*RAD_TO_DEG;
+  double pitch = atan2(-AcX, AcZ)*RAD_TO_DEG;
+
+  //3) set the starting angle to this pitch and roll
+  // double gyroXangle = roll;
+  // double gyroYangle = pitch;
+  compAngleX = roll;
+  compAngleY = pitch;
+
+  //start a timer
+  timer = micros();
 }
 
 void readSensors() {
@@ -332,32 +322,50 @@ void readSensors() {
   Wire.beginTransmission(MPU);
   Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
-  //Solicita os dados do sensor
-  Wire.requestFrom(MPU,14,true);  
-  //Armazena o valor dos sensores nas variaveis correspondentes
-  AcX=Wire.read()<<8|Wire.read();  //0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)     
-  AcY=Wire.read()<<8|Wire.read();  //0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
-  AcZ=Wire.read()<<8|Wire.read();  //0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
-  Tmp=Wire.read()<<8|Wire.read();  //0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
-  GyX=Wire.read()<<8|Wire.read();  //0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
-  GyY=Wire.read()<<8|Wire.read();  //0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
-  GyZ=Wire.read()<<8|Wire.read();  //0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+  Wire.requestFrom(MPU,6,true);  // request a total of 14 registers
+  AcX=Wire.read()<<8|Wire.read();  // 0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)     
+  AcY=Wire.read()<<8|Wire.read();  // 0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
+  AcZ=Wire.read()<<8|Wire.read();  // 0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
+  // Tmp=Wire.read()<<8|Wire.read();  // 0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
+  
+  Wire.beginTransmission(MPU);
+  Wire.write(0x43);  // starting with register 0x3B (ACCEL_XOUT_H)
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU,6,true);  // request a total of 14 registers
+  GyX=Wire.read()<<8|Wire.read();  // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+  GyY=Wire.read()<<8|Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+  GyZ=Wire.read()<<8|Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+
+
+  double dt = (double)(timer - timerPrev) / 1000000; //This line does three things: 1) stops the timer, 2)converts the timer's output to seconds from microseconds, 3)casts the value as a double saved to "dt".
+
+  //the next two lines calculate the orientation of the accelerometer relative to the earth and convert the output of atan2 from radians to degrees
+  //We will use this data to correct any cumulative errors in the orientation that the gyroscope develops.
+  double roll = atan2(AcY, AcZ)*RAD_TO_DEG;
+  double pitch = atan2(-AcX, AcZ)*RAD_TO_DEG;
+
+  //The gyroscope outputs angular velocities.  To convert these velocities from the raw data to deg/second, divide by 131.  
+  //Notice, we're dividing by a double "131.0" instead of the int 131.
+  double gyroXrate = GyX/131.0;
+  double gyroYrate = GyY/131.0;
+
+  //THE COMPLEMENTARY FILTER
+  //This filter calculates the angle based MOSTLY on integrating the angular velocity to an angular displacement.
+  //dt, recall, is the time between gathering data from the MPU6050.  We'll pretend that the 
+  //angular velocity has remained constant over the time dt, and multiply angular velocity by 
+  //time to get displacement.
+  //The filter then adds a small correcting factor from the accelerometer ("roll" or "pitch"), so the gyroscope knows which way is down. 
+  compAngleX = 0.99 * (compAngleX + gyroXrate * dt) + 0.01 * roll; // Calculate the angle using a Complimentary filter
+  compAngleY = 0.99 * (compAngleY + gyroYrate * dt) + 0.01 * pitch; 
+
+  Serial.print(" | compAngleX = "); Serial.print(compAngleX);
+  Serial.print(" | compAngleY = "); Serial.print(compAngleY);
+  
+  /*Now we have our angles in degree and values from -10º0 to 100º aprox*/
 
   //Envia valor da temperatura para a serial e o LCD
   //Calcula a temperatura em graus Celsius
-  Serial.print("Tmp = "); Serial.print(Tmp/340.00+36.53);
-  //Envia valor X do acelerometro para a serial e o LCD
-  Serial.print(" | AcX = "); Serial.print(AcX);
-  //Envia valor Y do acelerometro para a serial e o LCD
-  Serial.print(" | AcY = "); Serial.print(AcY);
-  //Envia valor Z do acelerometro para a serial e o LCD
-  Serial.print(" | AcZ = "); Serial.print(AcZ);
-  //Envia valor X do giroscopio para a serial e o LCD
-  Serial.print(" | GyX = "); Serial.print(GyX);
-  //Envia valor Y do giroscopio para a serial e o LCD  
-  Serial.print(" | GyY = "); Serial.print(GyY);
-  //Envia valor Z do giroscopio para a serial e o LCD
-  Serial.print(" | GyZ = "); Serial.println(GyZ);
+  // Serial.print("Tmp = "); Serial.print(Tmp/340.00+36.53);
 }
 
 // A special thanks to Electronoobs
