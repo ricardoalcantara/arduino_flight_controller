@@ -18,6 +18,8 @@
 
 // Lib needed to connect to the MPU 6050
 #include <Wire.h>
+// Lib requestFrom
+// https://github.com/jarzebski/Arduino-MPU6050
 #include <MPU6050.h>
 
 Servo motorA;
