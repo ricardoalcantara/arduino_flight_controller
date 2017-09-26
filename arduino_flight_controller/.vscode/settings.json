@@ -2,6 +2,11 @@
     "files.associations": {
         "condition_variable": "c",
         "future": "c",
-        "slist": "cpp"
+        "slist": "cpp",
+        "array": "cpp",
+        "string_view": "cpp",
+        "rope": "cpp",
+        "initializer_list": "cpp",
+        "valarray": "cpp"
     }
 }
