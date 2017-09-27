@@ -7,6 +7,9 @@
         "string_view": "cpp",
         "rope": "cpp",
         "initializer_list": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "*.tcc": "cpp",
+        "system_error": "cpp",
+        "type_traits": "cpp"
     }
 }

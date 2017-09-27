@@ -40,24 +40,27 @@ unsigned long timer = 0;
 float timeStep = 0.01;
 
 // long timer, timerPrev;
-float compAngleX, compAngleY;
+// float compAngleX, compAngleY;
 
 // Pitch, Roll and Yaw values
-float pitch = 0;
-float roll = 0;
-float yaw = 0;
+float pitchAngle = 0;
+float rollAngle = 0;
+float yawAngle = 0;
 
 //We create variables for the time width values of each PWM input signal
-unsigned long counter_1, counter_2, counter_3, counter_4, current_count;
+unsigned long counter_1, counter_2, counter_3, counter_4, counter_5, counter_6, current_count;
 
 //We create 4 variables to stopre the previous value of the input signal (if LOW or HIGH)
-byte last_CH1_state, last_CH2_state, last_CH3_state, last_CH4_state;
+byte last_CH1_state, last_CH2_state, last_CH3_state, last_CH4_state, last_CH5_state, last_CH6_state;
 
 //To store the 1000us to 2000us value we create variables and store each channel
 int input_YAW;      //In my case channel 4 of the receiver and pin D12 of arduino
 int input_PITCH;    //In my case channel 2 of the receiver and pin D9 of arduino
 int input_ROLL;     //In my case channel 1 of the receiver and pin D8 of arduino
 int input_THROTTLE; //In my case channel 3 of the receiver and pin D10 of arduino
+
+int input_RIGHT;
+int input_LEFT;
 
 // PID
 struct error {
@@ -103,6 +106,8 @@ void setup() {
   PCMSK0 |= (1 << PCINT1);  //Set pin D9 trigger an interrupt on state change.
   PCMSK0 |= (1 << PCINT2);  //Set pin D10 trigger an interrupt on state change.
   PCMSK0 |= (1 << PCINT3);  //Set pin D11 trigger an interrupt on state change.
+  PCMSK0 |= (1 << PCINT4);  //Set pin D12 trigger an interrupt on state change.
+  PCMSK0 |= (1 << PCINT5);  //Set pin D13 trigger an interrupt on state change.
   
   // why 12?
   // PCMSK0 |= (1 << PCINT4);  //Set pin D12 trigger an interrupt on state change.  
@@ -133,33 +138,29 @@ void loop() {
   readSensors();
   setMotor();
 
-  Serial.println("    ");
+  float wait = (timeStep*1000) - (millis() - timer);
+  Serial.println("");
   
   // Wait to full timeStep period
-  delay((timeStep*1000) - (millis() - timer));
+  if (wait > 0) {
+    delay((timeStep*1000) - (millis() - timer));
+  }
 }
 
 void initMotor() {
-  if (NO_MOTOR) {
-    Serial.println("No motors");
-    return;
-  }
-
-  int initValue = 0;
-
-  Serial.println("Init motor 1");
+  Serial.println("|status=Init motor 1");
   motorA.attach(ESC_A, MIN_SIGNAL, MAX_SIGNAL);
   motorA.writeMicroseconds(MIN_SIGNAL);
 
-  Serial.println("Init motor 2");
+  Serial.println("|status=Init motor 2");
   motorB.attach(ESC_B, MIN_SIGNAL, MAX_SIGNAL);
   motorB.writeMicroseconds(MIN_SIGNAL);
 
-  Serial.println("Init motor 3");
+  Serial.println("|status=Init motor 3");
   motorC.attach(ESC_C, MIN_SIGNAL, MAX_SIGNAL);
   motorC.writeMicroseconds(MIN_SIGNAL);
 
-  Serial.println("Init motor 4");
+  Serial.println("|status=Init motor 4");
   motorD.attach(ESC_D, MIN_SIGNAL, MAX_SIGNAL);
   motorD.writeMicroseconds(MIN_SIGNAL);
 }
@@ -168,6 +169,9 @@ void setMotor() {
   int rxRoll;
   int rxPitch;
   int rxYaw;
+
+  int rxLeft = map(input_LEFT, MIN_SIGNAL, MAX_SIGNAL, 0, 20);
+  int rxRight = map(input_RIGHT, MIN_SIGNAL, MAX_SIGNAL, 0, 20);
 
   if (FLIGHT_MODE == SOFT)
   {
@@ -182,6 +186,13 @@ void setMotor() {
     rxYaw = map(input_YAW, MIN_SIGNAL, MAX_SIGNAL, -270, 270);
   }
 
+  Serial.print("|rxYaw="); Serial.print(rxYaw);
+  Serial.print("|rxPitch="); Serial.print(rxPitch);
+  Serial.print("|rxRoll="); Serial.print(rxRoll);
+
+  Serial.print("|rxLeft="); Serial.print(rxLeft);
+  Serial.print("|rxRight="); Serial.print(rxRight);
+
   //Adjust difference - MIN_SIGNAL
   int throttle = map(input_THROTTLE, MIN_SIGNAL, MAX_SIGNAL, 0, 1000);
   float cmd_motA = throttle;
@@ -189,11 +200,13 @@ void setMotor() {
   float cmd_motC = throttle;
   float cmd_motD = throttle;
 
+  Serial.print("|throttle="); Serial.print(throttle);
+  
   //Somatório dos erros
   struct error sError = { .yaw = 0, .pitch = 0, .roll = 0};
 
   //Valor desejado - angulo atual
-  struct error anguloAtual = { .yaw = 0, .pitch = compAngleX, .roll = compAngleY};
+  struct error anguloAtual = { .yaw = yawAngle, .pitch = pitchAngle, .roll = rollAngle};
   // struct error anguloAtual = { .yaw = 0, .pitch = compAngleY, .roll = compAngleX};
   struct error anguloDesejado = { .yaw = rxYaw, .pitch = rxPitch, .roll = rxRoll};
 
@@ -206,9 +219,9 @@ void setMotor() {
   struct error deltaError;
 
   //Variáveis de ajuste
-  struct PID Kp = { .yaw = 2, .pitch = 2, .roll = 2};
+  struct PID Kp = { .yaw = 1.5, .pitch = 5, .roll = 5};
   struct PID Ki = { .yaw = 0, .pitch = 0, .roll = 0};
-  struct PID Kd = { .yaw = 0, .pitch = 0, .roll = 0};
+  struct PID Kd = { .yaw = rxLeft, .pitch = rxRight, .roll = rxRight};
   
   if (throttle > 0) {
       // Calculate sum of errors : Integral coefficients
@@ -235,10 +248,10 @@ void setMotor() {
 
       // Pitch - Tangage (Y axis)
       int pitch_PID = (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
-      cmd_motA -= pitch_PID;
-      cmd_motB -= pitch_PID;
-      cmd_motC += pitch_PID;
-      cmd_motD += pitch_PID;
+      cmd_motA += pitch_PID;
+      cmd_motB += pitch_PID;
+      cmd_motC -= pitch_PID;
+      cmd_motD -= pitch_PID;
 
       // Roll - Roulis (X axis)
       int roll_PID = (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
@@ -248,18 +261,14 @@ void setMotor() {
       cmd_motD += roll_PID;
   }
 
-  Serial.print(" | Motor_A ");
-  Serial.print(cmd_motA);
-  Serial.print(" | Motor_B ");
-  Serial.print(cmd_motB);
-  Serial.print(" | Motor_C ");
-  Serial.print(cmd_motC);
-  Serial.print(" | Motor_D ");
-  Serial.print(cmd_motD);
+  Serial.print("|Motor_A="); Serial.print(cmd_motA);
+  Serial.print("|Motor_B="); Serial.print(cmd_motB);
+  Serial.print("|Motor_C="); Serial.print(cmd_motC);
+  Serial.print("|Motor_D="); Serial.print(cmd_motD);
 
   // Apply speed for each motor
   if (NO_MOTOR) {
-    Serial.println("No motors to set");
+     Serial.print("|status=No motors to set");
     return;
   }
   motorA.writeMicroseconds(normalize(cmd_motA));
@@ -289,14 +298,14 @@ void setMotor() {
 
 void initSensors() {
   if (NO_SENSORS) {
-    Serial.println("No sensors");
+    Serial.print("|status=No sensors");
     return;
   }
 
   // Initialize MPU6050
   while(!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G))
   {
-    Serial.println("Could not find a valid MPU6050 sensor, check wiring!");
+    Serial.print("|status=Could not find a valid MPU6050 sensor, check wiring!");
     delay(500);
   }
 
@@ -357,9 +366,9 @@ void readSensors() {
   Vector norm = mpu.readNormalizeGyro();
 
   // Calculate Pitch, Roll and Yaw
-  pitch = pitch + norm.YAxis * timeStep;
-  roll = roll + norm.XAxis * timeStep;
-  yaw = yaw + norm.ZAxis * timeStep;
+  pitchAngle = pitchAngle + norm.YAxis * timeStep;
+  rollAngle = rollAngle + norm.XAxis * timeStep;
+  yawAngle = yawAngle + norm.ZAxis * timeStep;
 
   // Wire.beginTransmission(MPU);
   // Wire.write(0x3B);  // starting with register 0x3B (ACCEL_XOUT_H)
@@ -400,14 +409,15 @@ void readSensors() {
   // compAngleX = 0.99 * (compAngleX + gyroXrate * dt) + 0.01 * roll; // Calculate the angle using a Complimentary filter
   // compAngleY = 0.99 * (compAngleY + gyroYrate * dt) + 0.01 * pitch; 
 
-  Serial.print(" | compAngleX = "); Serial.print(compAngleX);
-  Serial.print(" | compAngleY = "); Serial.print(compAngleY);
+  Serial.print("|yawAngle="); Serial.print(yawAngle);
+  Serial.print("|pitchAngle="); Serial.print(pitchAngle);
+  Serial.print("|rollAngle="); Serial.print(rollAngle);
   
   /*Now we have our angles in degree and values from -10º0 to 100º aprox*/
 
   //Envia valor da temperatura para a serial e o LCD
   //Calcula a temperatura em graus Celsius
-  // Serial.print("Tmp = "); Serial.print(Tmp/340.00+36.53);
+  // Serial.print("Tmp="); Serial.print(Tmp/340.00+36.53);
 }
 
 // A special thanks to Electronoobs
@@ -463,5 +473,27 @@ ISR(PCINT0_vect){
   else if(last_CH4_state == 1){                                             
     last_CH4_state = 0;                                                  
     input_YAW = current_count - counter_4;                            
+  }
+  ///////////////////////////////////////Channel 5
+  if(PINB & B00010000 ){                             //pin D12  -- B00010000
+    if(last_CH5_state == 0){                                               
+      last_CH5_state = 1;                                                   
+      counter_5 = current_count;                                              
+    }
+  }
+  else if(last_CH5_state == 1){                                             
+    last_CH5_state = 0;                                                  
+    input_LEFT = current_count - counter_5;                            
+  }
+  ///////////////////////////////////////Channel 6
+  if(PINB & B00100000 ){                             //pin D13  -- B00100000
+    if(last_CH6_state == 0){                                               
+      last_CH6_state = 1;                                                   
+      counter_6 = current_count;                                              
+    }
+  }
+  else if(last_CH6_state == 1){                                             
+    last_CH6_state = 0;                                                  
+    input_RIGHT = current_count - counter_6;                            
   }   
 }
