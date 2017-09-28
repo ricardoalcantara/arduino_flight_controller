@@ -7,28 +7,8 @@
 
 #include "Logger.h"
 
-void Logger::logVariable(char key[], char value[]) {
-    Serial.print("|");
-    Serial.print(key);
-    Serial.print("=");
-    Serial.print(value);
-}
-
-void Logger::logVariable(char key[], int value) {
-    Serial.print("|");
-    Serial.print(key);
-    Serial.print("=");
-    Serial.print(value);
-}
-
-void Logger::logVariable(char key[], long value) {
-    Serial.print("|");
-    Serial.print(key);
-    Serial.print("=");
-    Serial.print(value);
-}
-
-void Logger::logVariable(char key[], float value) {
+template <typename T>
+void Logger::logVariable(char key[], T value) {
     Serial.print("|");
     Serial.print(key);
     Serial.print("=");
