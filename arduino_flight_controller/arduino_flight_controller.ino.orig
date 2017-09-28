@@ -143,9 +143,13 @@ void loop() {
   readSensors();
   setMotor();
 
+<<<<<<< Updated upstream
   float wait = (timeStep*1000) - (millis() - timer);
-  logger.endChunk();
+  Serial.println("");
   
+=======
+  logger.endChunk();  
+>>>>>>> Stashed changes
   // Wait to full timeStep period
   if (wait > 0) {
     delay((timeStep*1000) - (millis() - timer));
@@ -153,6 +157,21 @@ void loop() {
 }
 
 void initMotor() {
+<<<<<<< Updated upstream
+  Serial.println("|status=Init motor 1");
+  motorA.attach(ESC_A, MIN_SIGNAL, MAX_SIGNAL);
+  motorA.writeMicroseconds(MIN_SIGNAL);
+
+  Serial.println("|status=Init motor 2");
+  motorB.attach(ESC_B, MIN_SIGNAL, MAX_SIGNAL);
+  motorB.writeMicroseconds(MIN_SIGNAL);
+
+  Serial.println("|status=Init motor 3");
+  motorC.attach(ESC_C, MIN_SIGNAL, MAX_SIGNAL);
+  motorC.writeMicroseconds(MIN_SIGNAL);
+
+  Serial.println("|status=Init motor 4");
+=======
   if (NO_MOTOR) {
     logger.logStatus("No motors");
     return;
@@ -173,6 +192,7 @@ void initMotor() {
   motorC.writeMicroseconds(MIN_SIGNAL);
 
   logger.logStatus("Init motor 4");
+>>>>>>> Stashed changes
   motorD.attach(ESC_D, MIN_SIGNAL, MAX_SIGNAL);
   motorD.writeMicroseconds(MIN_SIGNAL);
 }
@@ -198,12 +218,12 @@ void setMotor() {
     rxYaw = map(input_YAW, MIN_SIGNAL, MAX_SIGNAL, -270, 270);
   }
 
-  logger.logVariable("rxYaw", rxYaw);
-  logger.logVariable("rxPitch", rxPitch);
-  logger.logVariable("rxRoll", rxRoll);
+  Serial.print("|rxYaw="); Serial.print(rxYaw);
+  Serial.print("|rxPitch="); Serial.print(rxPitch);
+  Serial.print("|rxRoll="); Serial.print(rxRoll);
 
-  logger.logVariable("rxLeft", rxLeft);
-  logger.logVariable("rxRight", rxRight);
+  Serial.print("|rxLeft="); Serial.print(rxLeft);
+  Serial.print("|rxRight="); Serial.print(rxRight);
 
   //Adjust difference - MIN_SIGNAL
   int throttle = map(input_THROTTLE, MIN_SIGNAL, MAX_SIGNAL, 0, 1000);
@@ -212,7 +232,7 @@ void setMotor() {
   float cmd_motC = throttle;
   float cmd_motD = throttle;
 
-  logger.logVariable("throttle", throttle);
+  Serial.print("|throttle="); Serial.print(throttle);
   
   //Somatório dos erros
   struct error sError = { .yaw = 0, .pitch = 0, .roll = 0};
@@ -273,6 +293,16 @@ void setMotor() {
       cmd_motD += roll_PID;
   }
 
+<<<<<<< Updated upstream
+  Serial.print("|Motor_A="); Serial.print(cmd_motA);
+  Serial.print("|Motor_B="); Serial.print(cmd_motB);
+  Serial.print("|Motor_C="); Serial.print(cmd_motC);
+  Serial.print("|Motor_D="); Serial.print(cmd_motD);
+
+  // Apply speed for each motor
+  if (NO_MOTOR) {
+     Serial.print("|status=No motors to set");
+=======
   logger.logVariable("Motor_A", cmd_motA);
   logger.logVariable("Motor_B", cmd_motB);
   logger.logVariable("Motor_C", cmd_motC);
@@ -281,6 +311,7 @@ void setMotor() {
   // Apply speed for each motor
   if (NO_MOTOR) {
     logger.logStatus("No motors to set");
+>>>>>>> Stashed changes
     return;
   }
   motorA.writeMicroseconds(normalize(cmd_motA));
@@ -310,14 +341,22 @@ void setMotor() {
 
 void initSensors() {
   if (NO_SENSORS) {
+<<<<<<< Updated upstream
+    Serial.print("|status=No sensors");
+=======
     logger.logStatus("No sensors");
+>>>>>>> Stashed changes
     return;
   }
 
   // Initialize MPU6050
   while(!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G))
   {
+<<<<<<< Updated upstream
+    Serial.print("|status=Could not find a valid MPU6050 sensor, check wiring!");
+=======
     logger.logStatus("Could not find a valid MPU6050 sensor, check wiring!");
+>>>>>>> Stashed changes
     delay(500);
   }
 
@@ -421,9 +460,14 @@ void readSensors() {
   // compAngleX = 0.99 * (compAngleX + gyroXrate * dt) + 0.01 * roll; // Calculate the angle using a Complimentary filter
   // compAngleY = 0.99 * (compAngleY + gyroYrate * dt) + 0.01 * pitch; 
 
-  logger.logVariable("yawAngle", yawAngle);
-  logger.logVariable("pitchAngle", pitchAngle);
-  logger.logVariable("rollAngle", rollAngle);
+<<<<<<< Updated upstream
+  Serial.print("|yawAngle="); Serial.print(yawAngle);
+  Serial.print("|pitchAngle="); Serial.print(pitchAngle);
+  Serial.print("|rollAngle="); Serial.print(rollAngle);
+=======
+  logger.logVariable("compAngleX", compAngleX);
+  logger.logVariable("compAngleY", compAngleY);
+>>>>>>> Stashed changes
   
   /*Now we have our angles in degree and values from -10º0 to 100º aprox*/
 
