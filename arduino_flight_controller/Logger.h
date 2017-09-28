@@ -6,13 +6,10 @@
 #define Logger_h
 
 #include "Arduino.h"
-
 class Logger {
     public:
-        void logVariable(char key[], char value[]);
-        void logVariable(char key[], int value);
-        void logVariable(char key[], long value);
-        void logVariable(char key[], float value);
+        template <typename T>
+        void logVariable(char key[], T value);
         void logStatus(char value[]);
         void endChunk();
 };
