@@ -108,3 +108,8 @@ port.open(function(){
     processMessage(data);
   });
 });
+
+// setInterval(() => {
+//   const msg = "|status=Done....|status=No motors|status=Init motor 1|status=Init motor 2|status=Init motor 3|status=Init motor 4|status=No motors to set|status=No motors to set|status=No sensors|status=Could not find a valid MPU6050 sensor, check wiring!" + "|rxYaw=" + Math.random() + "|rxPitch=" + Math.random() + "|rxRoll=" + Math.random() + "|rxLeft=" + Math.random() + "|rxRight=" + Math.random() + "|throttle=" + Math.random() + "|Motor_A=" + Math.random() + "|Motor_B=" + Math.random() + "|Motor_C=" + Math.random() + "|Motor_D=" + Math.random() + "|yawAngle=" + Math.random() + "|pitchAngle=" + Math.random() + "|rollAngle=" + Math.random();
+//   processMessage(msg);
+// }, 500);
