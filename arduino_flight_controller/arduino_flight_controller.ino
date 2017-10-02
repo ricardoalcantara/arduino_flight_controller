@@ -33,6 +33,18 @@ MPU6050 mpu;
 
 Logger logger;
 
+struct error {
+  float yaw;
+  float pitch;
+  float roll;
+};
+
+struct PID {
+  float yaw;
+  float pitch;
+  float roll;
+};
+
 //MPU6050 address of I2C
 const int MPU=0x68;
 
@@ -40,8 +52,8 @@ const int MPU=0x68;
 int AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
 
 // Timers
-unsigned long timer = 0;
-float timeStep = 0.01;
+unsigned long time = 0, timePrev = 0;
+float elapsedTime;
 
 // long timer, timerPrev;
 // float compAngleX, compAngleY;
@@ -66,29 +78,19 @@ int input_THROTTLE; //In my case channel 3 of the receiver and pin D10 of arduin
 int input_RIGHT;
 int input_LEFT;
 
-// PID
-struct error {
-  float yaw;
-  float pitch;
-  float roll;
-};
+struct PID Kp = { .yaw = 3.55, .pitch = 0.005, .roll = 2.05};
+struct PID Ki = { .yaw = 3.55, .pitch = 0.005, .roll = 2.05};
+struct PID Kd = { .yaw = 3.55, .pitch = 0.005, .roll = 2.05};
 
-struct PID {
-  float yaw;
-  float pitch;
-  float roll;
-};
 
-struct error lastErrors;
+struct error previous_errors;
 
-int normalize(float value)
+int normalize(float value, int min, int max)
 {
-  value = map((int) value, 0, 1000, MIN_SIGNAL, MAX_SIGNAL);
-
-  if (value > MAX_SIGNAL) {
-      value = MAX_SIGNAL;
-  } else if (value < MIN_SIGNAL) {
-      value = MIN_SIGNAL;
+  if (value > max) {
+      value = max;
+  } else if (value < min) {
+      value = min;
   }
 
   return value;
@@ -138,18 +140,12 @@ void loop() {
   // timerPrev = timer;  // the previous time is stored before the actual time read
 
   // https://github.com/jarzebski/Arduino-MPU6050/blob/master/MPU6050_gyro_pitch_roll_yaw/MPU6050_gyro_pitch_roll_yaw.ino
-  timer = millis();  // actual time read
+  timePrev = time;  // the previous time is stored before the actual time read
+  time = millis();  // actual time read
+  elapsedTime = (time - timePrev) / 1000; 
 
   readSensors();
-  setMotor();
-
-  float wait = (timeStep*1000) - (millis() - timer);
-  logger.endChunk();
-  
-  // Wait to full timeStep period
-  if (wait > 0) {
-    delay((timeStep*1000) - (millis() - timer));
-  }
+  setMotor();  
 }
 
 void initMotor() {
@@ -177,6 +173,145 @@ void initMotor() {
   motorD.writeMicroseconds(MIN_SIGNAL);
 }
 
+void setMotor() {
+  int rxRoll;
+  int rxPitch;
+  int rxYaw;
+
+  int rxLeft = map(input_LEFT, MIN_SIGNAL, MAX_SIGNAL, 0, 20);
+  int rxRight = map(input_RIGHT, MIN_SIGNAL, MAX_SIGNAL, 0, 20);
+
+  if (FLIGHT_MODE == SOFT)
+  {
+    rxRoll = map(input_ROLL, MIN_SIGNAL, MAX_SIGNAL, -45, 45);
+    rxPitch = map(input_PITCH, MIN_SIGNAL, MAX_SIGNAL, -45, 45);   
+    rxYaw = map(input_YAW, MIN_SIGNAL, MAX_SIGNAL, -180, 180);
+  }
+  else
+  {
+    rxRoll = map(input_ROLL, MIN_SIGNAL, MAX_SIGNAL, -180, 180);
+    rxPitch = map(input_PITCH, MIN_SIGNAL, MAX_SIGNAL, -180, 180);
+    rxYaw = map(input_YAW, MIN_SIGNAL, MAX_SIGNAL, -270, 270);
+  }
+
+  logger.logVariable("rxYaw", rxYaw);
+  logger.logVariable("rxPitch", rxPitch);
+  logger.logVariable("rxRoll", rxRoll);
+
+  logger.logVariable("rxLeft", rxLeft);
+  logger.logVariable("rxRight", rxRight);
+
+  //Adjust difference - MIN_SIGNAL
+  int throttle = map(input_THROTTLE, MIN_SIGNAL, MAX_SIGNAL, 0, 1000);
+  float cmd_motA = throttle;
+  float cmd_motB = throttle;
+  float cmd_motC = throttle;
+  float cmd_motD = throttle;
+
+  logger.logVariable("throttle", throttle);
+  
+  //Somatório dos erros
+  struct error sError = { .yaw = 0, .pitch = 0, .roll = 0};
+
+  //Valor desejado - angulo atual
+  struct error anguloAtual = { .yaw = yawAngle, .pitch = pitchAngle, .roll = rollAngle};
+  // struct error anguloAtual = { .yaw = 0, .pitch = compAngleY, .roll = compAngleX};
+  struct error anguloDesejado = { .yaw = rxYaw, .pitch = rxPitch, .roll = rxRoll};
+  
+  struct error deltaError;
+
+  //Variáveis de ajuste
+  
+  if (throttle > 0) {
+
+    struct error errors = { 
+      .yaw = anguloAtual.yaw - anguloDesejado.yaw,
+      .pitch = anguloAtual.pitch - anguloDesejado.pitch,
+      .roll = anguloAtual.roll - anguloDesejado.roll
+    };  
+    // Yaw - Lacet (Z axis)
+    // int yaw_PID = (errors.yaw * Kp.yaw + sError.yaw * Ki.yaw + deltaError.yaw * Kd.yaw);
+    int yaw_P = errors.yaw * Kp.yaw;
+
+    int yaw_I = 0;
+    if(-3 < errors.yaw <3)
+    {
+      // yaw_I = yaw_I+(ki*error);  
+      yaw_I = (sError.yaw * Ki.yaw) + deltaError.yaw;
+    }
+
+    // pid_d = kd*((error - previous_error)/elapsedTime);
+    int yaw_D = Kd.yaw * ((sError.yaw - previous_errors.yaw) / elapsedTime );
+
+    int yaw_PID = yaw_P + yaw_I + yaw_D;
+    yaw_PID = normalize(yaw_PID, -1000, 1000);
+    cmd_motA -= yaw_PID;
+    cmd_motB += yaw_PID;
+    cmd_motC += yaw_PID;
+    cmd_motD -= yaw_PID;
+
+    // Pitch - Tangage (Y axis)
+    // int pitch_PID = (errors.pitch * Kp.pitch + sError.pitch * Ki.pitch + deltaError.pitch * Kd.pitch);
+    int pitch_P = errors.pitch * Kp.pitch;
+    
+    int pitch_I = 0;
+    if(-3 < errors.pitch <3)
+    {
+      // pitch_I = pitch_I+(ki*error);  
+      pitch_I = (sError.pitch * Ki.pitch) + deltaError.pitch;
+    }
+
+    // pid_d = kd*((error - previous_error)/elapsedTime);
+    int pitch_D = Kd.pitch * ((sError.pitch - previous_errors.pitch) / elapsedTime );
+
+    int pitch_PID = pitch_P + pitch_I + pitch_D;    
+    pitch_PID = normalize(pitch_PID, -1000, 1000);
+    cmd_motA += pitch_PID;
+    cmd_motB += pitch_PID;
+    cmd_motC -= pitch_PID;
+    cmd_motD -= pitch_PID;
+
+    // Roll - Roulis (X axis)
+    // int roll_PID = (errors.roll * Kp.roll + sError.roll * Ki.roll + deltaError.roll * Kd.roll);
+    int roll_P = errors.roll * Kp.roll;
+    
+    int roll_I = 0;
+    if(-3 < errors.roll <3)
+    {
+      // roll_I = roll_I+(ki*error);  
+      roll_I = (sError.roll * Ki.roll) + deltaError.roll;
+    }
+
+    // pid_d = kd*((error - previous_error)/elapsedTime);
+    int roll_D = Kd.roll * ((sError.roll - previous_errors.roll) / elapsedTime );
+
+    int roll_PID = roll_P + roll_I + roll_D;
+    roll_PID = normalize(roll_PID, -1000, 1000);
+    cmd_motA -= roll_PID;
+    cmd_motB += roll_PID;
+    cmd_motC -= roll_PID;
+    cmd_motD += roll_PID;
+
+    previous_errors = errors;
+  }
+
+  logger.logVariable("Motor_A", cmd_motA);
+  logger.logVariable("Motor_B", cmd_motB);
+  logger.logVariable("Motor_C", cmd_motC);
+  logger.logVariable("Motor_D", cmd_motD);
+
+  // Apply speed for each motor
+  if (NO_MOTOR) {
+    logger.logStatus("No motors to set");
+    return;
+  }
+  motorA.writeMicroseconds(normalize(cmd_motA, MIN_SIGNAL, MAX_SIGNAL));
+  motorB.writeMicroseconds(normalize(cmd_motB, MIN_SIGNAL, MAX_SIGNAL));
+  motorC.writeMicroseconds(normalize(cmd_motC, MIN_SIGNAL, MAX_SIGNAL));
+  motorD.writeMicroseconds(normalize(cmd_motD, MIN_SIGNAL, MAX_SIGNAL));
+}
+
+/*
 void setMotor() {
   int rxRoll;
   int rxPitch;
@@ -288,6 +423,7 @@ void setMotor() {
   motorC.writeMicroseconds(normalize(cmd_motC));
   motorD.writeMicroseconds(normalize(cmd_motD));
 }
+*/
 
 void initSensors() {
   if (NO_SENSORS) {
@@ -320,9 +456,9 @@ void readSensors() {
   Vector norm = mpu.readNormalizeGyro();
 
   // Calculate Pitch, Roll and Yaw
-  pitchAngle = pitchAngle + norm.YAxis * timeStep;
-  rollAngle = rollAngle + norm.XAxis * timeStep;
-  yawAngle = yawAngle + norm.ZAxis * timeStep;
+  pitchAngle = pitchAngle + norm.YAxis * 0.01;
+  rollAngle = rollAngle + norm.XAxis * 0.01;
+  yawAngle = yawAngle + norm.ZAxis * 0.01;
 
   logger.logVariable("yawAngle", yawAngle);
   logger.logVariable("pitchAngle", pitchAngle);
