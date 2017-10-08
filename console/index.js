@@ -2,7 +2,7 @@ const SerialPort = require('serialport');
 
 const Readline = SerialPort.parsers.Readline;
 
-var port = new SerialPort('/dev/ttyUSB0', {
+var port = new SerialPort('/dev/ttyUSB1', {
   baudRate: 57600
 });
 
@@ -67,6 +67,10 @@ function printConsole() {
   console.log("Motor_B ", variables["Motor_B"]);
   console.log("Motor_C ", variables["Motor_C"]);
   console.log("Motor_D ", variables["Motor_D"]);
+  console.log("");
+  console.log("-------------------------------");
+  console.log("Ext");
+  console.log("Delay ", variables["delay"]);
   console.log("");
   console.log("-------------------------------");
   console.log("Thanks");

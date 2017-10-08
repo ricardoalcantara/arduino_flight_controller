@@ -13,14 +13,16 @@
 #define HARD 1
 #define FLIGHT_MODE SOFT
 
+#define MPU_addr 0x68
+
 // Lib needed to connect to the motors by their ESCs
 #include <Servo.h>
 
 // Lib needed to connect to the MPU 6050
-#include <Wire.h>
+// #include <Wire.h>
 // Lib requestFrom
 // https://github.com/jarzebski/Arduino-MPU6050
-#include <MPU6050.h>
+#include "MPU6050.h"
 
 #include "Logger.h"
 
@@ -48,11 +50,11 @@ struct PID {
 //MPU6050 address of I2C
 const int MPU=0x68;
 
-//Variaveis para armazenar valores dos sensores
-int AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+// //Variaveis para armazenar valores dos sensores
+// int AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
 
 // Timers
-unsigned long time = 0, timePrev = 0;
+unsigned long timer = 0, timerPrev = 0;
 float elapsedTime;
 
 // long timer, timerPrev;
@@ -82,8 +84,9 @@ struct PID Kp = { .yaw = 3.55, .pitch = 0.005, .roll = 2.05};
 struct PID Ki = { .yaw = 3.55, .pitch = 0.005, .roll = 2.05};
 struct PID Kd = { .yaw = 3.55, .pitch = 0.005, .roll = 2.05};
 
-
 struct error previous_errors;
+
+int i = 0;
 
 int normalize(float value, int min, int max)
 {
@@ -129,7 +132,9 @@ void setup() {
   // initRCReceiver();
   
   // Tempo para os motores armarem
-  delay(5000);  
+  delay(1000);
+  timer = millis();  // actual time read  
+ 
   logger.logStatus("Done....");
   logger.endChunk();
 }
@@ -140,12 +145,15 @@ void loop() {
   // timerPrev = timer;  // the previous time is stored before the actual time read
 
   // https://github.com/jarzebski/Arduino-MPU6050/blob/master/MPU6050_gyro_pitch_roll_yaw/MPU6050_gyro_pitch_roll_yaw.ino
-  timePrev = time;  // the previous time is stored before the actual time read
-  time = millis();  // actual time read
-  elapsedTime = (time - timePrev) / 1000; 
+  timerPrev = timer;  // the previous time is stored before the actual time read
+  timer = millis();  // actual time read  
+  elapsedTime = (timer - timerPrev) / 1000; 
+  
 
   readSensors();
-  setMotor();  
+  setMotor();
+
+  logger.endChunk();
 }
 
 void initMotor() {
@@ -153,8 +161,6 @@ void initMotor() {
     logger.logStatus("No motors");
     return;
   }
-
-  int initValue = 0;
 
   logger.logStatus("Init motor 1");
   motorA.attach(ESC_A, MIN_SIGNAL, MAX_SIGNAL);
@@ -431,34 +437,48 @@ void initSensors() {
     return;
   }
 
-  // Initialize MPU6050
-  while(!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G))
-  {
-    logger.logStatus("Could not find a valid MPU6050 sensor, check wiring!");
-    delay(500);
-  }
+  // // Initialize MPU6050
+  // while(!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G))
+  // {
+  //   logger.logStatus("Could not find a valid MPU6050 sensor, check wiring!");
+  //   delay(500);
+  // }
 
-  // Calibrate gyroscope. The calibration must be at rest.
-  // If you don't want calibrate, comment this line.
-  mpu.calibrateGyro();
+  // // Calibrate gyroscope. The calibration must be at rest.
+  // // If you don't want calibrate, comment this line.
+  // mpu.calibrateGyro();
   
-  // Set threshold sensivty. Default 3.
-  // If you don't want use threshold, comment this line or set 0.
-  mpu.setThreshold(3);
+  // // Set threshold sensivty. Default 3.
+  // // If you don't want use threshold, comment this line or set 0.
+  // mpu.setThreshold(3);
+
+  mpu.begin();
 }
+
+int calibrateI = 0;
 
 void readSensors() {
   if (NO_SENSORS) {
     return;
   }
 
-  // Read normalized values
-  Vector norm = mpu.readNormalizeGyro();
+  Vector angles = mpu.readAngle();
+  
+  if (calibrateI < 200) {
+    mpu.calibrateGyro();
+    calibrateI++;
+  }
 
-  // Calculate Pitch, Roll and Yaw
-  pitchAngle = pitchAngle + norm.YAxis * 0.01;
-  rollAngle = rollAngle + norm.XAxis * 0.01;
-  yawAngle = yawAngle + norm.ZAxis * 0.01;
+  pitchAngle = angles.YAxis;
+  rollAngle = angles.XAxis;
+  yawAngle = angles.ZAxis;
+  
+  // Vector norm = mpu.readNormalizeGyro();
+
+  // // Calculate Pitch, Roll and Yaw
+  // pitchAngle = pitchAngle + norm.YAxis * 0.01;
+  // rollAngle = rollAngle + norm.XAxis * 0.01;
+  // yawAngle = yawAngle + norm.ZAxis * 0.01;
 
   logger.logVariable("yawAngle", yawAngle);
   logger.logVariable("pitchAngle", pitchAngle);

@@ -5,7 +5,7 @@
 #ifndef Logger_h
 #define Logger_h
 
-#include "Arduino.h"
+#include <Arduino.h>
 
 class Logger {
     public:

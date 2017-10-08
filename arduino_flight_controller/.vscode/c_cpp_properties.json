@@ -18,7 +18,7 @@
                 "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include/",
                 "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include-fixed/",
                 "${ARDUINO_HOME}/libraries/Servo",
-                "${ARDUINO_HOME}/libraries/MPU6050"
+                "~/Arduino/libraries/MPU6050"
             ],
             "defines": [],
             "intelliSenseMode": "clang-x64",
@@ -39,7 +39,7 @@
                     "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include/",
                     "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include-fixed/",
                     "${ARDUINO_HOME}/libraries/Servo",
-                    "${ARDUINO_HOME}/libraries/MPU6050"
+                    "~/Arduino/libraries/MPU6050"
                 ],
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": ""
@@ -70,7 +70,7 @@
                 "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include/",
                 "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include-fixed/",
                 "${ARDUINO_HOME}/libraries/Servo",
-                "${ARDUINO_HOME}/libraries/MPU6050",
+                "~/Arduino/libraries/MPU6050",
                 "/opt/arduino-1.8.4/hardware/arduino/avr/cores/arduino"
             ],
             "defines": [],
@@ -95,7 +95,7 @@
                     "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include/",
                     "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include-fixed/",
                     "${ARDUINO_HOME}/libraries/Servo",
-                    "${ARDUINO_HOME}/libraries/MPU6050",
+                    "~/Arduino/libraries/MPU6050",
                     "/opt/arduino-1.8.4/hardware/arduino/avr/cores/arduino"
                 ],
                 "limitSymbolsToIncludedHeaders": false,
@@ -119,7 +119,7 @@
                 "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include/",
                 "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include-fixed/",
                 "${ARDUINO_HOME}/libraries/Servo",
-                "${ARDUINO_HOME}/libraries/MPU6050"
+                "~/Arduino/libraries/MPU6050"
             ],
             "defines": [
                 "_DEBUG",
@@ -142,7 +142,7 @@
                     "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include/",
                     "${ARDUINO_HOME}/hardware/tools/avr/lib/gcc/avr/4.*.*/include-fixed/",
                     "${ARDUINO_HOME}/libraries/Servo",
-                    "${ARDUINO_HOME}/libraries/MPU6050"
+                    "~/Arduino/libraries/MPU6050"
                 ],
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": ""
