@@ -2,7 +2,9 @@ const SerialPort = require('serialport');
 
 const Readline = SerialPort.parsers.Readline;
 
-var port = new SerialPort('/dev/ttyUSB1', {
+// console.log(process.argv[2]); return;
+
+var port = new SerialPort(process.argv[2], {
   baudRate: 57600
 });
 
